@@ -1,0 +1,2083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trichrome — local image converter</title>
+<style>
+  :root{
+    --bg:#131417;
+    --panel:#191a1e;
+    --panel-2:#1f2126;
+    --raise:#26282e;
+    --line:#2b2d33;
+    --line-soft:#232529;
+    --text:#e9e8e6;
+    --dim:#8b8d94;
+    --dimmer:#63656c;
+
+    --png:#4cc6d6;
+    --jpeg:#e2609e;
+    --webp:#e0ab3f;
+
+    --ok:#63c08a;
+    --warn:#e0ab3f;
+    --danger:#e2606a;
+
+    --ink:var(--png);
+
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:var(--sans);font-size:13px;line-height:1.45;
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+  }
+  button,input,select{font:inherit;color:inherit}
+  button{background:none;border:0;cursor:pointer}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#33353c;border:3px solid var(--panel);border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  .lbl{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--dimmer);
+  }
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---------- shell ---------- */
+  .app{
+    display:grid;height:100vh;
+    grid-template-columns:286px minmax(0,1fr) 296px;
+    grid-template-rows:100%;
+  }
+
+  /* ---------- left sidebar ---------- */
+  .side{
+    background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .brand{
+    padding:16px 16px 13px;border-bottom:1px solid var(--line);
+    display:flex;align-items:baseline;gap:8px;
+  }
+  .brand h1{
+    margin:0;font-family:var(--mono);font-size:13px;font-weight:600;
+    letter-spacing:.16em;text-transform:uppercase;
+  }
+  .brand .chan{display:flex;gap:3px;margin-left:auto}
+  .brand .chan i{width:9px;height:9px;border-radius:50%;display:block}
+
+  .adds{padding:12px 12px 10px;display:flex;flex-direction:column;gap:8px}
+  .drop{
+    border:1px dashed #3a3d45;border-radius:4px;background:var(--panel-2);
+    padding:16px 12px;text-align:center;cursor:pointer;
+    transition:border-color .12s,background .12s;
+  }
+  .drop:hover{border-color:#4e525c;background:var(--raise)}
+  .drop.hot{border-color:var(--ink);background:#22262b}
+  .drop b{display:block;font-size:12px;font-weight:550;margin-bottom:3px}
+  .drop span{display:block}
+
+  .listwrap{flex:1;overflow-y:auto;min-height:0;padding:2px 8px 8px}
+  .empty{padding:26px 14px;text-align:center;color:var(--dimmer);line-height:1.6}
+
+  .card{
+    position:relative;display:grid;grid-template-columns:44px 1fr;gap:10px;
+    padding:9px;border-radius:4px;border:1px solid transparent;cursor:pointer;
+    margin-bottom:3px;
+  }
+  .card:hover{background:var(--panel-2)}
+  .card.sel{background:var(--panel-2);border-color:#3a3d45}
+  .card.sel::before{
+    content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;
+    background:var(--ink);border-radius:2px;
+  }
+  .thumb{
+    width:44px;height:44px;border-radius:3px;overflow:hidden;
+    background-color:#202226;
+    background-image:linear-gradient(45deg,#26282d 25%,transparent 25%),linear-gradient(-45deg,#26282d 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#26282d 75%),linear-gradient(-45deg,transparent 75%,#26282d 75%);
+    background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .thumb img{max-width:100%;max-height:100%;display:block}
+  .cmeta{min-width:0}
+  .cname{
+    font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    margin-bottom:2px;
+  }
+  .cdim{font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:6px}
+  .cdim .arrow{color:var(--dimmer);margin:0 3px}
+  .cdim em{font-style:normal;color:var(--text)}
+  .chips{display:flex;gap:3px}
+  .chip{
+    flex:1;border-radius:2px;padding:2px 0 3px;text-align:center;
+    background:#202227;border-top:2px solid var(--c);
+  }
+  .chip.off{opacity:.28}
+  .chip u{
+    display:block;text-decoration:none;font-family:var(--mono);font-size:8px;
+    letter-spacing:.06em;color:var(--c);
+  }
+  .chip b{display:block;font-family:var(--mono);font-size:9.5px;font-weight:500;color:var(--dim)}
+  .kill{
+    position:absolute;top:5px;right:5px;width:18px;height:18px;border-radius:3px;
+    color:var(--dimmer);font-size:14px;line-height:16px;opacity:0;
+  }
+  .card:hover .kill{opacity:1}
+  .kill:hover{background:var(--raise);color:var(--danger)}
+
+  .sidefoot{border-top:1px solid var(--line);padding:10px 12px 12px}
+  .stat{display:flex;justify-content:space-between;margin-bottom:3px}
+  .stat b{font-family:var(--mono);font-size:10px;font-weight:500}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+    padding:8px 10px;border-radius:3px;background:var(--raise);
+    border:1px solid var(--line);font-size:12px;font-weight:500;
+    transition:background .12s,border-color .12s;
+  }
+  .btn:hover:not(:disabled){background:#2f323a;border-color:#3d4048}
+  .btn:disabled{opacity:.38;cursor:not-allowed}
+  .btn.hero{background:var(--ink);border-color:var(--ink);color:#101114;font-weight:600}
+  .btn.hero:hover:not(:disabled){filter:brightness(1.1);background:var(--ink)}
+  .btn.sm{padding:5px 8px;font-size:11px}
+  .btn.ghost{background:transparent}
+  .btn.ghost:hover:not(:disabled){background:var(--panel-2)}
+  .row{display:flex;gap:6px}
+
+  /* ---------- stage ---------- */
+  .main{position:relative;display:flex;flex-direction:column;min-width:0;background:#0e0f11}
+  .bar{
+    height:44px;flex:0 0 44px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--panel);
+  }
+  .fname{
+    font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    max-width:34%;color:var(--dim);
+  }
+  .tabs{display:flex;gap:2px;background:var(--panel-2);padding:2px;border-radius:3px}
+  .tab{
+    padding:5px 13px;border-radius:2px;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.09em;color:var(--dim);border-bottom:2px solid transparent;
+  }
+  .tab:hover{color:var(--text)}
+  .tab.on{background:var(--raise);color:var(--c);border-bottom-color:var(--c)}
+  .tab s{text-decoration:none;opacity:.55;margin-left:7px;font-size:9.5px}
+  .spacer{flex:1}
+
+  .zoomctl{display:flex;align-items:center;gap:1px;background:var(--panel-2);border-radius:3px;padding:2px}
+  .zoomctl button{
+    padding:4px 8px;border-radius:2px;font-family:var(--mono);font-size:11px;color:var(--dim);
+  }
+  .zoomctl button:hover{background:var(--raise);color:var(--text)}
+  .zoomctl button.on{background:var(--raise);color:var(--text)}
+  .zoomval{
+    min-width:52px;text-align:center;font-family:var(--mono);font-size:11px;
+    font-variant-numeric:tabular-nums;color:var(--text);
+  }
+
+  .stage{
+    flex:1;position:relative;overflow:hidden;cursor:grab;
+    background-color:#0e0f11;
+  }
+  .stage.drag{cursor:grabbing}
+  .wrap{position:absolute;left:0;top:0;transform-origin:0 0}
+  .wrap::before{
+    content:"";position:absolute;inset:0;
+    background-color:#17181b;
+    background-image:linear-gradient(45deg,#1e2024 25%,transparent 25%),linear-gradient(-45deg,#1e2024 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1e2024 75%),linear-gradient(-45deg,transparent 75%,#1e2024 75%);
+    background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;
+  }
+  .wrap img{
+    position:absolute;left:0;top:0;width:100%;height:100%;display:block;
+    -webkit-user-drag:none;user-select:none;pointer-events:none;
+  }
+  .wrap img.hide{visibility:hidden}
+  .wrap.px img{image-rendering:pixelated}
+  .wrap::after{
+    content:"";position:absolute;inset:-1px;border:1px solid rgba(255,255,255,.11);
+    pointer-events:none;
+  }
+
+  .stageMsg{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--dimmer);text-align:center;padding:30px;pointer-events:none;line-height:1.7;
+  }
+
+  .cmpTag{
+    position:absolute;left:12px;top:12px;padding:4px 9px;border-radius:3px;
+    background:rgba(14,15,17,.86);border:1px solid var(--line);backdrop-filter:blur(6px);
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  }
+  .cmpTag.out{color:var(--c);border-color:var(--c)}
+  .cmpTag.orig{color:var(--text)}
+
+  .foot{
+    height:32px;flex:0 0 32px;border-top:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:14px;padding:0 12px;
+    font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--dim);
+  }
+  .foot .sep{width:1px;height:13px;background:var(--line)}
+  .foot em{font-style:normal;color:var(--text)}
+  .foot .save{color:var(--ok)}
+  .foot .grow{color:var(--warn)}
+  .hold{
+    margin-left:auto;padding:3px 9px;border-radius:3px;border:1px solid var(--line);
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--dim);user-select:none;
+  }
+  .hold:hover,.hold.on{background:var(--raise);color:var(--text)}
+
+  /* ---------- inspector ---------- */
+  .insp{
+    background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .iscroll{flex:1;overflow-y:auto;min-height:0}
+  .sec{padding:14px;border-bottom:1px solid var(--line-soft)}
+  .sech{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+  .sech .lbl{flex:1}
+  .fld{margin-bottom:10px}
+  .fld:last-child{margin-bottom:0}
+  .fld .lbl{display:block;margin-bottom:5px}
+
+  input[type=text],input[type=number]{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:3px;
+    padding:6px 8px;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;
+  }
+  input[type=number]{-moz-appearance:textfield}
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input:focus{border-color:var(--ink);outline:none}
+
+  .dims{display:grid;grid-template-columns:1fr 30px 1fr;gap:6px;align-items:end}
+  .link{
+    height:31px;border-radius:3px;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--dimmer);font-size:13px;display:flex;align-items:center;justify-content:center;
+  }
+  .link.on{color:var(--ink);border-color:var(--ink)}
+  .pcts{display:flex;gap:4px;margin-top:8px}
+  .pcts button{
+    flex:1;padding:5px 0;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);
+  }
+  .pcts button:hover{background:var(--raise);color:var(--text)}
+  .pcts button.on{border-color:var(--ink);color:var(--ink)}
+
+  /* format blocks */
+  .fmt{border:1px solid var(--line);border-radius:4px;margin-bottom:8px;overflow:hidden}
+  .fmt:last-of-type{margin-bottom:0}
+  .fmt.on{border-color:color-mix(in srgb,var(--c) 45%,var(--line))}
+  .fmth{
+    display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel-2);
+    border-left:2px solid var(--c);
+  }
+  .fmt.off .fmth{border-left-color:#3a3d45;filter:saturate(.15)}
+  .fmth .nm{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--c);flex:1}
+  .fmth .sz{font-family:var(--mono);font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .sw{
+    position:relative;width:26px;height:15px;border-radius:8px;background:#3a3d45;
+    flex:0 0 26px;transition:background .14s;
+  }
+  .sw::after{
+    content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+    background:#c9ccd2;transition:transform .14s;
+  }
+  .sw.on{background:var(--c)}
+  .sw.on::after{transform:translateX(11px);background:#14161a}
+  .fmtb{padding:10px}
+  .qtop{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+  .qval{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;color:var(--c)}
+  .lossless{
+    padding:7px 9px;border-radius:3px;background:var(--panel-2);
+    font-size:11px;color:var(--dim);line-height:1.5;
+  }
+  .lossless b{color:var(--png);font-weight:500}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;
+    display:block;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:#3a3d45}
+  input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:#3a3d45}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--c);
+    margin-top:-5px;border:2px solid #14161a;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px;height:13px;border-radius:50%;background:var(--c);border:2px solid #14161a;
+  }
+  input[type=range]:disabled{opacity:.35;cursor:not-allowed}
+  .qmarks{display:flex;justify-content:space-between;margin-top:2px}
+
+  /* segmented control */
+  .seg{display:flex;gap:2px;background:var(--panel-2);padding:2px;border-radius:3px;margin-bottom:11px}
+  .seg button{
+    flex:1;padding:5px 0;border-radius:2px;font-family:var(--mono);font-size:9.5px;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  }
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:var(--raise);color:var(--c)}
+
+  /* skeleton / loading */
+  .card.load{cursor:default}
+  .skel{
+    background:linear-gradient(90deg,#202226 25%,#2c2f35 37%,#202226 63%);
+    background-size:400% 100%;animation:shimmer 1.4s infinite linear;
+  }
+  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+  .skelline{height:9px;border-radius:2px;margin-bottom:5px}
+  .miniprog{height:2px;background:#2b2d33;border-radius:2px;overflow:hidden;margin-top:7px}
+  .miniprog i{display:block;height:100%;width:38%;background:var(--ink);animation:slide 1.15s infinite ease-in-out}
+  @keyframes slide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+
+  .topload{
+    position:absolute;left:0;right:0;top:0;height:2px;overflow:hidden;
+    display:none;z-index:5;pointer-events:none;
+  }
+  .topload.on{display:block}
+  .topload i{display:block;height:100%;width:28%;background:var(--ink);animation:slide 1s infinite ease-in-out}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:4px 8px;
+    border-radius:3px;background:rgba(99,192,138,.1);border:1px solid rgba(99,192,138,.32);
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ok);
+  }
+  .badge.warnb{background:rgba(224,171,63,.1);border-color:rgba(224,171,63,.3);color:var(--warn)}
+
+  .chk{display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:9px}
+  .chk:last-child{margin-bottom:0}
+  .chk input{
+    appearance:none;-webkit-appearance:none;width:14px;height:14px;flex:0 0 14px;margin:1px 0 0;
+    border:1px solid var(--line);border-radius:2px;background:var(--panel-2);position:relative;cursor:pointer;
+  }
+  .chk input:checked{background:var(--ink);border-color:var(--ink)}
+  .chk input:checked::after{
+    content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
+    border:solid #101114;border-width:0 2px 2px 0;transform:rotate(42deg);
+  }
+  .chk span{font-size:11.5px;line-height:1.45}
+  .chk small{display:block;color:var(--dimmer);font-size:10.5px;line-height:1.45;margin-top:1px}
+
+  .matte{display:flex;align-items:center;gap:8px}
+  .matte input[type=color]{
+    width:30px;height:26px;padding:0;border:1px solid var(--line);border-radius:3px;
+    background:var(--panel-2);cursor:pointer;
+  }
+  .matte input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+  .matte input[type=color]::-webkit-color-swatch{border:0;border-radius:2px}
+
+  .inspfoot{border-top:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:6px}
+
+  .totals{margin-bottom:4px}
+  .trow{
+    display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:baseline;
+    padding:3px 0;
+  }
+  .trow + .trow{border-top:1px solid var(--line-soft)}
+  .trow .tag{
+    font-family:var(--mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--c);
+  }
+  .trow.src .tag{color:var(--dimmer)}
+  .trow .amt{
+    font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;color:var(--text);
+  }
+  .trow.src .amt{color:var(--dim)}
+  .trow .pct{
+    font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--dimmer);
+  }
+  .trow .pct.save{color:var(--ok)}
+  .trow .pct.grow{color:var(--warn)}
+  .trow.dim{opacity:.4}
+
+  .note{
+    padding:9px 10px;border-radius:3px;background:var(--panel-2);border-left:2px solid var(--warn);
+    font-size:11px;color:var(--dim);line-height:1.5;
+  }
+  .note b{color:var(--text);font-weight:500}
+
+  /* progress */
+  .prog{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+    padding:11px 16px;min-width:260px;box-shadow:0 12px 34px rgba(0,0,0,.55);
+    display:none;
+  }
+  .prog.on{display:block}
+  .prog .t{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;margin-bottom:7px}
+  .prog .track{height:2px;background:#3a3d45;border-radius:2px;overflow:hidden}
+  .prog .fill{height:100%;background:var(--ink);width:0%;transition:width .14s}
+
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:70;
+    background:var(--raise);border:1px solid var(--line);border-radius:4px;
+    padding:9px 15px;font-size:12px;box-shadow:0 12px 34px rgba(0,0,0,.55);
+    opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;
+  }
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .toast.bad{border-color:var(--danger);color:#f3a9ae}
+
+  .busy{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ink);animation:pulse 1s infinite ease-in-out}
+  @keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+  }
+  @media (max-width:1180px){
+    .app{grid-template-columns:240px minmax(0,1fr) 264px}
+  }
+  @media (max-width:900px){
+    body{overflow:auto}
+    .app{grid-template-columns:100%;grid-template-rows:auto 62vh auto;height:auto}
+    .side,.insp{border:0;border-bottom:1px solid var(--line)}
+    .listwrap{max-height:38vh}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ LEFT: library ============ -->
+  <aside class="side">
+    <div class="brand">
+      <h1>Trichrome</h1>
+      <div class="chan">
+        <i style="background:var(--png)"></i>
+        <i style="background:var(--jpeg)"></i>
+        <i style="background:var(--webp)"></i>
+      </div>
+    </div>
+
+    <div class="adds">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add images">
+        <b>Add images</b>
+        <span class="lbl">drop here &nbsp;·&nbsp; png jpg webp</span>
+      </div>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+    </div>
+
+    <div class="listwrap" id="list">
+      <div class="empty" id="empty">
+        <span class="lbl">library empty</span><br>
+        <span style="font-size:11.5px">Add up to 40 images.<br>Everything stays on this machine.</span>
+      </div>
+    </div>
+
+    <div class="sidefoot">
+      <div class="stat"><span class="lbl">images</span><b class="num" id="stCount">0 / 40</b></div>
+      <div class="stat" style="margin-bottom:9px"><span class="lbl">pixels loaded</span><b class="num" id="stMp">0 MP</b></div>
+      <div class="row">
+        <button class="btn sm ghost" id="btnClear" disabled>Clear all</button>
+        <button class="btn sm ghost" id="btnRecalc" disabled>Refresh sizes</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ CENTER: inspection stage ============ -->
+  <main class="main">
+    <div class="bar">
+      <span class="fname" id="fname">No image selected</span>
+
+      <div class="tabs" id="tabs">
+        <button class="tab on" data-f="png"  style="--c:var(--png)">PNG<s id="tsPng">—</s></button>
+        <button class="tab"    data-f="jpeg" style="--c:var(--jpeg)">JPG<s id="tsJpeg">—</s></button>
+        <button class="tab"    data-f="webp" style="--c:var(--webp)">WEBP<s id="tsWebp">—</s></button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="zoomctl">
+        <button id="zOut" title="Zoom out">−</button>
+        <span class="zoomval" id="zVal">—</span>
+        <button id="zIn" title="Zoom in">+</button>
+        <button id="zFit" title="Fit to window">Fit</button>
+        <button id="z100" title="Actual pixels">1:1</button>
+      </div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="topload" id="topload"><i></i></div>
+      <div class="wrap" id="wrap" style="display:none">
+        <img id="imgOut" alt="Converted output" draggable="false">
+        <img id="imgOrig" class="hide" alt="Original for comparison" draggable="false">
+      </div>
+      <div class="cmpTag out" id="cmpTag" style="display:none">Output</div>
+      <div class="stageMsg" id="stageMsg">
+        Add an image to start.<br>
+        <span class="lbl">scroll to zoom · drag to pan · double-click to fit</span>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span><span class="lbl">out</span> <em id="fDims">—</em></span>
+      <div class="sep"></div>
+      <span><span class="lbl">size</span> <em id="fSize">—</em></span>
+      <div class="sep"></div>
+      <span id="fDelta">—</span>
+      <div class="sep"></div>
+      <span><span class="lbl">src</span> <em id="fSrc">—</em></span>
+      <button class="hold" id="holdBtn" title="Hold to see the original (or hold the C key)">Hold to compare · C</button>
+    </div>
+  </main>
+
+  <!-- ============ RIGHT: settings ============ -->
+  <aside class="insp">
+    <div class="iscroll">
+
+      <div class="sec">
+        <div class="sech"><span class="lbl">Output size</span></div>
+        <div class="dims">
+          <div>
+            <label class="lbl" for="inW">width</label>
+            <input type="number" id="inW" min="1" max="20000" disabled>
+          </div>
+          <button class="link on" id="btnLink" title="Lock aspect ratio" aria-pressed="true">⛓</button>
+          <div>
+            <label class="lbl" for="inH">height</label>
+            <input type="number" id="inH" min="1" max="20000" disabled>
+          </div>
+        </div>
+        <div class="pcts" id="pcts">
+          <button data-p="100" class="on">100%</button>
+          <button data-p="75">75%</button>
+          <button data-p="50">50%</button>
+          <button data-p="25">25%</button>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn sm ghost" id="btnScaleAll" disabled>Apply this scale to all images</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sech"><span class="lbl">Quality per format</span></div>
+
+        <!-- PNG -->
+        <div class="fmt on" id="blkPng" style="--c:var(--png)">
+          <div class="fmth">
+            <button class="sw on" data-en="png" role="switch" aria-checked="true" aria-label="Include PNG"></button>
+            <span class="nm">PNG</span>
+            <span class="sz" id="szPng">—</span>
+          </div>
+          <div class="fmtb">
+            <div class="seg" id="pngSeg">
+              <button data-m="lossless">Lossless</button>
+              <button data-m="palette" class="on">Reduced colours</button>
+            </div>
+
+            <div id="pngLossless" style="display:none">
+              <div class="lossless"><b>Every pixel preserved.</b> Re-packed with optimal filtering and the smallest colour type the image actually needs — usually smaller than the file the browser would write.</div>
+            </div>
+
+            <div id="pngPalette">
+              <div class="qtop"><span class="lbl">colours</span><span class="qval" id="qvPng">256</span></div>
+              <input type="range" id="qPng" min="2" max="256" value="256" disabled aria-label="PNG palette colours">
+              <div class="qmarks"><span class="lbl">2</span><span class="lbl">256</span></div>
+              <label class="chk" style="margin-top:10px">
+                <input type="checkbox" id="cbDither" checked>
+                <span>Dither
+                  <small>Scatters the rounding error so gradients don't band. Costs a little file size.</small>
+                </span>
+              </label>
+            </div>
+            <div id="ptPng"></div>
+          </div>
+        </div>
+
+        <!-- JPEG -->
+        <div class="fmt on" id="blkJpeg" style="--c:var(--jpeg)">
+          <div class="fmth">
+            <button class="sw on" data-en="jpeg" role="switch" aria-checked="true" aria-label="Include JPG"></button>
+            <span class="nm">JPG</span>
+            <span class="sz" id="szJpeg">—</span>
+          </div>
+          <div class="fmtb">
+            <div class="qtop"><span class="lbl">quality</span><span class="qval" id="qvJpeg">92</span></div>
+            <input type="range" id="qJpeg" min="1" max="100" value="92" disabled aria-label="JPG quality">
+            <div class="qmarks"><span class="lbl">1</span><span class="lbl">100</span></div>
+            <div id="ptJpeg"></div>
+          </div>
+        </div>
+
+        <!-- WEBP -->
+        <div class="fmt on" id="blkWebp" style="--c:var(--webp)">
+          <div class="fmth">
+            <button class="sw on" data-en="webp" role="switch" aria-checked="true" aria-label="Include WebP"></button>
+            <span class="nm">WEBP</span>
+            <span class="sz" id="szWebp">—</span>
+          </div>
+          <div class="fmtb">
+            <div class="qtop"><span class="lbl">quality</span><span class="qval" id="qvWebp">92</span></div>
+            <input type="range" id="qWebp" min="1" max="100" value="92" disabled aria-label="WebP quality">
+            <div class="qmarks"><span class="lbl">1</span><span class="lbl">100 · lossless</span></div>
+            <div id="ptWebp"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:9px">
+          <button class="btn sm ghost" id="btnQualAll" disabled>Apply these settings to all images</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sech"><span class="lbl">Handling</span></div>
+        <label class="chk">
+          <input type="checkbox" id="cbPass" checked>
+          <span>Keep the original file untouched
+            <small>When the format and size already match and quality is 100, the original bytes are copied straight through — no re-encoding at all.</small>
+          </span>
+        </label>
+        <div class="fld" style="margin-top:12px">
+          <span class="lbl">JPG background</span>
+          <div class="matte">
+            <input type="color" id="matte" value="#ffffff">
+            <span style="font-size:11px;color:var(--dim);line-height:1.4">Fills transparency, since JPG has no alpha channel.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec" style="border-bottom:0">
+        <div class="note">
+          <b>Colour profiles.</b> Re-encoding through the browser converts to sRGB and drops embedded ICC profiles. For colour-critical print work, keep the original file (checkbox above) or convert in Photoshop.
+        </div>
+      </div>
+    </div>
+
+    <div class="inspfoot">
+      <div class="totals" id="totals">
+        <div class="trow src">
+          <span class="tag">source</span><span class="amt" id="tSrc">—</span><span class="pct"></span>
+        </div>
+        <div class="trow" id="trPng" style="--c:var(--png)">
+          <span class="tag">png</span><span class="amt" id="tPng">—</span><span class="pct" id="tpPng"></span>
+        </div>
+        <div class="trow" id="trJpeg" style="--c:var(--jpeg)">
+          <span class="tag">jpg</span><span class="amt" id="tJpeg">—</span><span class="pct" id="tpJpeg"></span>
+        </div>
+        <div class="trow" id="trWebp" style="--c:var(--webp)">
+          <span class="tag">webp</span><span class="amt" id="tWebp">—</span><span class="pct" id="tpWebp"></span>
+        </div>
+      </div>
+      <button class="btn hero" id="btnExportAll" disabled>Export all images</button>
+      <button class="btn" id="btnExportOne" disabled>Export this image</button>
+    </div>
+  </aside>
+</div>
+
+<div class="prog" id="prog">
+  <div class="t"><span id="progLabel">Working…</span><span class="num" id="progNum">0%</span></div>
+  <div class="track"><div class="fill" id="progFill"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Trichrome — offline image converter
+   Everything runs in this page. No uploads, no network.
+   ============================================================ */
+
+const MAX_IMAGES = 40;
+const MP_WARN    = 320;                       // total megapixels before we warn
+const FORMATS    = ["png", "jpeg", "webp"];
+const MIME       = { png:"image/png", jpeg:"image/jpeg", webp:"image/webp" };
+const EXT        = { png:"png",       jpeg:"jpg",        webp:"webp" };
+const LABEL      = { png:"PNG",       jpeg:"JPG",        webp:"WEBP" };
+
+const state = {
+  items: [],
+  selId: null,
+  fmt: "png",
+  zoom: 1,
+  fit: true,
+  panX: 0,
+  panY: 0,
+  comparing: false,
+  webpOK: true,
+  deflateOK: true,
+  passthrough: true,
+  matte: "#ffffff",
+};
+
+// render cache for the selected image (resized RGBA canvas)
+let renderCache = { key:"", canvas:null };
+// encoded blobs for the selected image only — keeps memory sane
+let outBlobs = { png:null, jpeg:null, webp:null };
+let outURL = null, origURL = null;
+let seq = 0;                                   // invalidates stale async work
+
+const $ = id => document.getElementById(id);
+const el = {
+  drop:$("drop"), file:$("file"), list:$("list"), empty:$("empty"),
+  stCount:$("stCount"), stMp:$("stMp"), btnClear:$("btnClear"), btnRecalc:$("btnRecalc"),
+  fname:$("fname"), tabs:$("tabs"),
+  zOut:$("zOut"), zIn:$("zIn"), zFit:$("zFit"), z100:$("z100"), zVal:$("zVal"),
+  stage:$("stage"), wrap:$("wrap"), imgOut:$("imgOut"), imgOrig:$("imgOrig"),
+  stageMsg:$("stageMsg"), cmpTag:$("cmpTag"),
+  fDims:$("fDims"), fSize:$("fSize"), fDelta:$("fDelta"), fSrc:$("fSrc"), holdBtn:$("holdBtn"),
+  inW:$("inW"), inH:$("inH"), btnLink:$("btnLink"), pcts:$("pcts"), btnScaleAll:$("btnScaleAll"),
+  qJpeg:$("qJpeg"), qWebp:$("qWebp"), qvJpeg:$("qvJpeg"), qvWebp:$("qvWebp"),
+  ptJpeg:$("ptJpeg"), ptWebp:$("ptWebp"), ptPng:$("ptPng"),
+  qPng:$("qPng"), qvPng:$("qvPng"), cbDither:$("cbDither"),
+  pngSeg:$("pngSeg"), pngPalette:$("pngPalette"), pngLossless:$("pngLossless"),
+  topload:$("topload"),
+  szPng:$("szPng"), szJpeg:$("szJpeg"), szWebp:$("szWebp"),
+  tsPng:$("tsPng"), tsJpeg:$("tsJpeg"), tsWebp:$("tsWebp"),
+  blk:{ png:$("blkPng"), jpeg:$("blkJpeg"), webp:$("blkWebp") },
+  btnQualAll:$("btnQualAll"), cbPass:$("cbPass"), matte:$("matte"),
+  btnExportAll:$("btnExportAll"), btnExportOne:$("btnExportOne"),
+  tSrc:$("tSrc"),
+  tPng:$("tPng"), tJpeg:$("tJpeg"), tWebp:$("tWebp"),
+  tpPng:$("tpPng"), tpJpeg:$("tpJpeg"), tpWebp:$("tpWebp"),
+  trPng:$("trPng"), trJpeg:$("trJpeg"), trWebp:$("trWebp"),
+  prog:$("prog"), progLabel:$("progLabel"), progNum:$("progNum"), progFill:$("progFill"),
+  toast:$("toast"),
+};
+
+/* ---------------- helpers ---------------- */
+
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const sel   = () => state.items.find(i => i.id === state.selId) || null;
+
+function fmtBytes(n){
+  if (n == null) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+  return (n/1048576).toFixed(n < 10485760 ? 2 : 1) + " MB";
+}
+function baseName(name){ return name.replace(/\.[^.]+$/, ""); }
+function fmtOfMime(m){
+  if (m === "image/png") return "png";
+  if (m === "image/jpeg" || m === "image/jpg") return "jpeg";
+  if (m === "image/webp") return "webp";
+  return null;
+}
+let toastT;
+function toast(msg, bad){
+  el.toast.textContent = msg;
+  el.toast.classList.toggle("bad", !!bad);
+  el.toast.classList.add("on");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.toast.classList.remove("on"), 2800);
+}
+function progress(on, label, pct){
+  el.prog.classList.toggle("on", !!on);
+  if (label) el.progLabel.textContent = label;
+  if (pct != null){
+    el.progFill.style.width = pct + "%";
+    el.progNum.textContent = Math.round(pct) + "%";
+  }
+}
+
+/* ---------------- encoding core ---------------- */
+
+// Progressive halving keeps downscales sharp instead of aliased.
+function drawResized(bmp, w, h){
+  let src = bmp, cw = bmp.width, ch = bmp.height;
+  while (cw > w * 2 && ch > h * 2){
+    const nw = Math.max(w, Math.floor(cw / 2));
+    const nh = Math.max(h, Math.floor(ch / 2));
+    const c = document.createElement("canvas");
+    c.width = nw; c.height = nh;
+    const x = c.getContext("2d");
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+    x.drawImage(src, 0, 0, nw, nh);
+    src = c; cw = nw; ch = nh;
+  }
+  const out = document.createElement("canvas");
+  out.width = w; out.height = h;
+  const x = out.getContext("2d");
+  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = "high";
+  x.drawImage(src, 0, 0, w, h);
+  return out;
+}
+
+function toBlobAsync(canvas, mime, q){
+  return new Promise(res => canvas.toBlob(res, mime, q));
+}
+
+const yieldTick = () => new Promise(r => setTimeout(r, 0));
+
+/* ============================================================
+   PNG ENCODER
+   The browser's canvas PNG writer always emits full truecolor at
+   low compression effort. This writes the file by hand so we can
+   pick the smallest colour type, filter adaptively, and optionally
+   quantize to a palette the way pngquant / TinyPNG do.
+   ============================================================ */
+
+const PNG_SIG = new Uint8Array([137,80,78,71,13,10,26,10]);
+
+function pngChunk(type, data){
+  const out = new Uint8Array(12 + data.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length, false);                 // PNG is big-endian
+  for (let i = 0; i < 4; i++) out[4+i] = type.charCodeAt(i);
+  out.set(data, 8);
+  dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)), false);
+  return out;
+}
+
+// CompressionStream('deflate') emits the zlib wrapper PNG expects (RFC 1950).
+async function zlibDeflate(u8){
+  const cs = new CompressionStream("deflate");
+  const stream = new Blob([u8]).stream().pipeThrough(cs);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function assemblePNG(w, h, colorType, bitDepth, raw, plte, trns){
+  const ihdr = new Uint8Array(13);
+  const dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w, false); dv.setUint32(4, h, false);
+  ihdr[8] = bitDepth; ihdr[9] = colorType;
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;            // deflate, adaptive filter, no interlace
+
+  const parts = [PNG_SIG, pngChunk("IHDR", ihdr)];
+  if (plte) parts.push(pngChunk("PLTE", plte));
+  if (trns && trns.length) parts.push(pngChunk("tRNS", trns));
+  parts.push(pngChunk("IDAT", await zlibDeflate(raw)));
+  parts.push(pngChunk("IEND", new Uint8Array(0)));
+  return new Blob(parts, { type:"image/png" });
+}
+
+/* ---- adaptive scanline filtering (libpng's minimum-sum heuristic) ---- */
+async function filterScanlines(pix, w, h, bpp){
+  const stride = w * bpp;
+  const raw = new Uint8Array((stride + 1) * h);
+  const cand = [0,1,2,4].map(() => new Uint8Array(stride));   // None, Sub, Up, Paeth
+  const types = [0,1,2,4];
+  let prev = new Uint8Array(stride);
+  let p = 0;
+
+  for (let y = 0; y < h; y++){
+    const cur = pix.subarray(y * stride, (y + 1) * stride);
+    let best = 0, bestScore = Infinity;
+
+    for (let k = 0; k < types.length; k++){
+      const f = types[k], out = cand[k];
+      let score = 0;
+      for (let i = 0; i < stride; i++){
+        const a = i >= bpp ? cur[i - bpp] : 0;
+        const b = prev[i];
+        const c = i >= bpp ? prev[i - bpp] : 0;
+        let v;
+        if (f === 0) v = cur[i];
+        else if (f === 1) v = cur[i] - a;
+        else if (f === 2) v = cur[i] - b;
+        else {
+          const est = a + b - c;
+          const pa = Math.abs(est - a), pb = Math.abs(est - b), pc = Math.abs(est - c);
+          v = cur[i] - ((pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c));
+        }
+        v &= 255;
+        out[i] = v;
+        score += v < 128 ? v : 256 - v;
+      }
+      if (score < bestScore){ bestScore = score; best = k; }
+    }
+
+    raw[p++] = types[best];
+    raw.set(cand[best], p);
+    p += stride;
+    prev = cur;
+    if ((y & 127) === 127) await yieldTick();
+  }
+  return raw;
+}
+
+/* ---- pack palette indices at 1/2/4/8 bits per pixel ---- */
+function packIndexed(idx, w, h, bitDepth){
+  const perByte = 8 / bitDepth;
+  const rowBytes = Math.ceil(w / perByte);
+  const raw = new Uint8Array((rowBytes + 1) * h);
+  let p = 0;
+  for (let y = 0; y < h; y++){
+    raw[p++] = 0;                                       // filter None suits indexed data
+    if (bitDepth === 8){
+      raw.set(idx.subarray(y * w, y * w + w), p);
+    } else {
+      let acc = 0, bits = 0, o = p;
+      for (let x = 0; x < w; x++){
+        acc = (acc << bitDepth) | idx[y * w + x];
+        bits += bitDepth;
+        if (bits === 8){ raw[o++] = acc; acc = 0; bits = 0; }
+      }
+      if (bits) raw[o++] = acc << (8 - bits);
+    }
+    p += rowBytes;
+  }
+  return raw;
+}
+
+const depthFor = n => n <= 2 ? 1 : n <= 4 ? 2 : n <= 16 ? 4 : 8;
+
+function buildPLTE(pal){
+  const plte = new Uint8Array(pal.length * 3);
+  for (let i = 0; i < pal.length; i++){
+    plte[i*3] = pal[i].r; plte[i*3+1] = pal[i].g; plte[i*3+2] = pal[i].b;
+  }
+  let last = -1;
+  for (let i = 0; i < pal.length; i++) if (pal[i].a < 255) last = i;
+  const trns = last < 0 ? null : new Uint8Array(last + 1);
+  if (trns) for (let i = 0; i <= last; i++) trns[i] = pal[i].a;
+  return { plte, trns };
+}
+
+/* ---- median-cut quantization ---- */
+
+function histogram(data, n){
+  const map = new Map();
+  for (let i = 0; i < n; i++){
+    const o = i * 4;
+    const r = data[o], g = data[o+1], b = data[o+2], a = data[o+3];
+    const key = ((r >> 3) << 15) | ((g >> 3) << 10) | ((b >> 3) << 5) | (a >> 3);
+    const e = map.get(key);
+    if (e){ e.c++; e.r += r; e.g += g; e.b += b; e.a += a; }
+    else map.set(key, { c:1, r, g, b, a });
+  }
+  const out = new Array(map.size);
+  let i = 0;
+  for (const e of map.values()){
+    out[i++] = { c:e.c, r:e.r/e.c, g:e.g/e.c, b:e.b/e.c, a:e.a/e.c };
+  }
+  return out;
+}
+
+function makeBox(items){
+  let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0,amin=255,amax=0,count=0;
+  for (const e of items){
+    if (e.r<rmin) rmin=e.r; if (e.r>rmax) rmax=e.r;
+    if (e.g<gmin) gmin=e.g; if (e.g>gmax) gmax=e.g;
+    if (e.b<bmin) bmin=e.b; if (e.b>bmax) bmax=e.b;
+    if (e.a<amin) amin=e.a; if (e.a>amax) amax=e.a;
+    count += e.c;
+  }
+  // green weighted up, alpha weighted hard so opacity never blends away
+  const spans = [(rmax-rmin)*1.0, (gmax-gmin)*1.4, (bmax-bmin)*0.8, (amax-amin)*1.6];
+  let axis = 0;
+  for (let i = 1; i < 4; i++) if (spans[i] > spans[axis]) axis = i;
+  return { items, count, axis, range: spans[axis] };
+}
+
+function splitBox(box){
+  const ch = ["r","g","b","a"][box.axis];
+  const items = box.items.slice().sort((p, q) => p[ch] - q[ch]);
+  const half = box.count / 2;
+  let acc = 0, cut = 0;
+  for (let i = 0; i < items.length - 1; i++){
+    acc += items[i].c;
+    if (acc >= half){ cut = i + 1; break; }
+  }
+  if (cut <= 0 || cut >= items.length) cut = Math.floor(items.length / 2) || 1;
+  return [makeBox(items.slice(0, cut)), makeBox(items.slice(cut))];
+}
+
+async function medianCut(entries, k){
+  let boxes = [makeBox(entries)];
+  let step = 0;
+  while (boxes.length < k){
+    let pick = -1, bestScore = -1;
+    for (let i = 0; i < boxes.length; i++){
+      const b = boxes[i];
+      if (b.items.length < 2 || b.range <= 0) continue;
+      const score = b.range * Math.cbrt(b.count);
+      if (score > bestScore){ bestScore = score; pick = i; }
+    }
+    if (pick < 0) break;
+    const [b1, b2] = splitBox(boxes[pick]);
+    boxes.splice(pick, 1, b1, b2);
+    if ((++step & 15) === 0) await yieldTick();
+  }
+  return boxes.map(b => {
+    let r=0,g=0,bb=0,a=0,c=0;
+    for (const e of b.items){ r+=e.r*e.c; g+=e.g*e.c; bb+=e.b*e.c; a+=e.a*e.c; c+=e.c; }
+    return { r:Math.round(r/c), g:Math.round(g/c), b:Math.round(bb/c), a:Math.round(a/c) };
+  });
+}
+
+async function quantize(imgData, colors, dither){
+  const { data, width:w, height:h } = imgData;
+  const n = w * h;
+
+  const hist = histogram(data, n);
+  await yieldTick();
+
+  let pal;
+  if (hist.length <= colors){
+    // fewer distinct colours than requested — index exactly, no loss at all
+    pal = hist.map(e => ({ r:Math.round(e.r), g:Math.round(e.g), b:Math.round(e.b), a:Math.round(e.a) }));
+  } else {
+    pal = await medianCut(hist, colors);
+  }
+  pal.sort((x, y) => x.a - y.a);                        // transparent first shortens tRNS
+
+  const cache = new Int16Array(1 << 20).fill(-1);
+  const pr = new Int32Array(pal.length), pg = new Int32Array(pal.length),
+        pb = new Int32Array(pal.length), pa = new Int32Array(pal.length);
+  pal.forEach((p, i) => { pr[i]=p.r; pg[i]=p.g; pb[i]=p.b; pa[i]=p.a; });
+
+  function nearest(r, g, b, a){
+    const key = ((r >> 3) << 15) | ((g >> 3) << 10) | ((b >> 3) << 5) | (a >> 3);
+    const hit = cache[key];
+    if (hit >= 0) return hit;
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < pr.length; i++){
+      const dr = r - pr[i], dg = g - pg[i], db = b - pb[i], da = a - pa[i];
+      const d = dr*dr*2 + dg*dg*4 + db*db*3 + da*da*5;
+      if (d < bd){ bd = d; bi = i; if (!d) break; }
+    }
+    cache[key] = bi;
+    return bi;
+  }
+
+  const idx = new Uint8Array(n);
+
+  if (!dither){
+    for (let i = 0; i < n; i++){
+      const o = i * 4;
+      idx[i] = nearest(data[o], data[o+1], data[o+2], data[o+3]);
+      if ((i & 0xFFFFF) === 0xFFFFF) await yieldTick();
+    }
+  } else {
+    // Floyd–Steinberg, two rolling error rows so memory stays flat
+    let errCur = new Float32Array((w + 2) * 4);
+    let errNext = new Float32Array((w + 2) * 4);
+    const cl = v => v < 0 ? 0 : v > 255 ? 255 : v;
+
+    for (let y = 0; y < h; y++){
+      for (let x = 0; x < w; x++){
+        const o = (y * w + x) * 4, e = (x + 1) * 4;
+        const r = cl(data[o]   + errCur[e]);
+        const g = cl(data[o+1] + errCur[e+1]);
+        const b = cl(data[o+2] + errCur[e+2]);
+        const a = cl(data[o+3] + errCur[e+3]);
+        const i = nearest(Math.round(r), Math.round(g), Math.round(b), Math.round(a));
+        idx[y * w + x] = i;
+
+        const er = r - pr[i], eg = g - pg[i], eb = b - pb[i], ea = a - pa[i];
+        const push = (arr, off, f) => {
+          arr[off]   += er * f; arr[off+1] += eg * f;
+          arr[off+2] += eb * f; arr[off+3] += ea * f;
+        };
+        push(errCur,  e + 4, 7/16);
+        push(errNext, e - 4, 3/16);
+        push(errNext, e,     5/16);
+        push(errNext, e + 4, 1/16);
+      }
+      const swap = errCur; errCur = errNext; errNext = swap;
+      errNext.fill(0);
+      if ((y & 63) === 63) await yieldTick();
+    }
+  }
+
+  return { idx, pal };
+}
+
+/* ---- lossless: pick the smallest colour type the image truly needs ---- */
+function analyzePixels(data, n){
+  let hasAlpha = false, grey = true, tooMany = false;
+  const map = new Map();
+  for (let i = 0; i < n; i++){
+    const o = i * 4;
+    const r = data[o], g = data[o+1], b = data[o+2], a = data[o+3];
+    if (a !== 255) hasAlpha = true;
+    if (r !== g || g !== b) grey = false;
+    if (!tooMany){
+      const k = (((r << 24) | (g << 16) | (b << 8) | a) >>> 0);
+      if (!map.has(k)){
+        map.set(k, map.size);
+        if (map.size > 256){ tooMany = true; map.clear(); }
+      }
+    }
+  }
+  return { hasAlpha, grey, indexable: !tooMany, map };
+}
+
+async function encodePNGLossless(canvas){
+  const ctx = canvas.getContext("2d");
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data } = img;
+  const w = canvas.width, h = canvas.height, n = w * h;
+  const info = analyzePixels(data, n);
+  await yieldTick();
+
+  let blob;
+
+  if (info.indexable && info.map.size > 0){
+    const pal = [];
+    for (const k of info.map.keys()){
+      pal.push({ r:(k >>> 24) & 255, g:(k >>> 16) & 255, b:(k >>> 8) & 255, a:k & 255 });
+    }
+    pal.sort((x, y) => x.a - y.a);
+    const lookup = new Map();
+    pal.forEach((p, i) => lookup.set((((p.r << 24) | (p.g << 16) | (p.b << 8) | p.a) >>> 0), i));
+
+    const idx = new Uint8Array(n);
+    for (let i = 0; i < n; i++){
+      const o = i * 4;
+      idx[i] = lookup.get((((data[o] << 24) | (data[o+1] << 16) | (data[o+2] << 8) | data[o+3]) >>> 0));
+    }
+    const depth = depthFor(pal.length);
+    const { plte, trns } = buildPLTE(pal);
+    blob = await assemblePNG(w, h, 3, depth, packIndexed(idx, w, h, depth), plte, trns);
+
+  } else {
+    let colorType, bpp;
+    if (info.grey && !info.hasAlpha){ colorType = 0; bpp = 1; }
+    else if (info.grey)             { colorType = 4; bpp = 2; }
+    else if (!info.hasAlpha)        { colorType = 2; bpp = 3; }
+    else                            { colorType = 6; bpp = 4; }
+
+    let pix;
+    if (colorType === 6){
+      pix = data;
+    } else {
+      pix = new Uint8Array(n * bpp);
+      for (let i = 0; i < n; i++){
+        const o = i * 4, p = i * bpp;
+        if (colorType === 0) pix[p] = data[o];
+        else if (colorType === 4){ pix[p] = data[o]; pix[p+1] = data[o+3]; }
+        else { pix[p] = data[o]; pix[p+1] = data[o+1]; pix[p+2] = data[o+2]; }
+      }
+    }
+    const raw = await filterScanlines(pix, w, h, bpp);
+    blob = await assemblePNG(w, h, colorType, 8, raw, null, null);
+  }
+
+  // never hand back something larger than the browser's own encoder
+  const native = await toBlobAsync(canvas, "image/png");
+  return (native && native.size < blob.size) ? native : blob;
+}
+
+async function encodePNGPalette(canvas, colors, dither){
+  const ctx = canvas.getContext("2d");
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { idx, pal } = await quantize(img, colors, dither);
+  const depth = depthFor(pal.length);
+  const { plte, trns } = buildPLTE(pal);
+  return await assemblePNG(canvas.width, canvas.height, 3, depth,
+                           packIndexed(idx, canvas.width, canvas.height, depth), plte, trns);
+}
+
+async function encodePNG(canvas, item){
+  if (!state.deflateOK) return await toBlobAsync(canvas, "image/png");
+  try {
+    return item.pngMode === "palette"
+      ? await encodePNGPalette(canvas, item.pngColors, item.pngDither)
+      : await encodePNGLossless(canvas);
+  } catch(e){
+    console.warn("PNG encoder fell back to canvas:", e);
+    return await toBlobAsync(canvas, "image/png");
+  }
+}
+
+async function encodeCanvas(canvas, fmt, item){
+  if (fmt === "png") return await encodePNG(canvas, item);
+  let c = canvas;
+  if (fmt === "jpeg"){                       // JPG has no alpha — flatten first
+    c = document.createElement("canvas");
+    c.width = canvas.width; c.height = canvas.height;
+    const x = c.getContext("2d");
+    x.fillStyle = state.matte; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(canvas, 0, 0);
+  }
+  return await toBlobAsync(c, MIME[fmt], item.q[fmt] / 100);
+}
+
+// True when the original bytes can be handed over untouched.
+function isPassthrough(item, fmt){
+  if (!state.passthrough) return false;
+  if (item.w !== item.ow || item.h !== item.oh) return false;
+  if (fmtOfMime(item.file.type) !== fmt) return false;
+  if (fmt === "png") return item.pngMode === "lossless";
+  return item.q[fmt] >= 100;
+}
+
+async function getCanvas(item){
+  const key = item.id + ":" + item.w + "x" + item.h;
+  if (renderCache.key === key && renderCache.canvas) return renderCache.canvas;
+  const bmp = await createImageBitmap(item.file);
+  const canvas = drawResized(bmp, item.w, item.h);
+  bmp.close();
+  renderCache = { key, canvas };
+  return canvas;
+}
+
+// Encodes one format. Reuses the cached canvas when this is the selected image.
+async function makeBlob(item, fmt, canvasOverride){
+  if (isPassthrough(item, fmt)) return item.file;
+  if (fmt === "webp" && !state.webpOK) return null;
+  const canvas = canvasOverride || await getCanvas(item);
+  return await encodeCanvas(canvas, fmt, item);
+}
+
+/* ---------------- library ---------------- */
+
+let idc = 0;
+
+async function addFiles(files){
+  const incoming = Array.from(files).filter(f => fmtOfMime(f.type));
+  if (!incoming.length){ toast("Only PNG, JPG and WebP can be added.", true); return; }
+
+  const room = MAX_IMAGES - state.items.length;
+  if (room <= 0){ toast("Library is full at " + MAX_IMAGES + " images.", true); return; }
+  const take = incoming.slice(0, room);
+  if (incoming.length > room) toast("Added " + room + " — library holds " + MAX_IMAGES + ".", true);
+
+  // Place every card straight away so the library fills in visibly,
+  // then decode one at a time behind a progress bar.
+  const pending = take.map(f => {
+    const item = {
+      id: ++idc, file: f, name: f.name,
+      ow: 0, oh: 0, w: 0, h: 0,
+      lock: true, pct: 100,
+      q: { png:100, jpeg:92, webp:92 },
+      pngMode: "palette", pngColors: 256, pngDither: true,
+      on: { png:true, jpeg:true, webp:state.webpOK },
+      sizes: { png:null, jpeg:null, webp:null },
+      pass:  { png:false, jpeg:false, webp:false },
+      thumb: null, loading: true, dirty: false,
+    };
+    state.items.push(item);
+    return item;
+  });
+
+  renderList(); updateCounts();
+  progress(true, "Reading images…", 0);
+
+  let done = 0, failed = 0;
+  for (const item of pending){
+    progress(true, `Reading ${item.name}`, done / pending.length * 100);
+    await yieldTick();
+    try {
+      const bmp = await createImageBitmap(item.file);
+      item.ow = item.w = bmp.width;
+      item.oh = item.h = bmp.height;
+      item.thumb = makeThumb(bmp);
+      bmp.close();
+      item.loading = false;
+      item.dirty = true;
+    } catch(e){
+      const i = state.items.indexOf(item);
+      if (i >= 0) state.items.splice(i, 1);
+      failed++;
+    }
+    done++;
+    progress(true, `Reading images…`, done / pending.length * 100);
+    renderList(); updateCounts();
+    if (!sel() && state.items.length) select(state.items[0].id);
+  }
+
+  progress(false);
+  if (failed) toast(failed + (failed === 1 ? " file could not be read." : " files could not be read."), true);
+  renderList(); updateCounts();
+  if (!sel() && state.items.length) select(state.items[0].id);
+  queueSizes();
+}
+
+function makeThumb(bmp){
+  const m = 88;
+  const s = Math.min(m / bmp.width, m / bmp.height, 1);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * s));
+  c.height = Math.max(1, Math.round(bmp.height * s));
+  const x = c.getContext("2d");
+  x.imageSmoothingQuality = "high";
+  x.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/png");
+}
+
+function renderList(){
+  el.empty.style.display = state.items.length ? "none" : "block";
+  const cards = state.items.map(it => {
+    if (it.loading){
+      return `
+        <div class="card load">
+          <div class="thumb skel"></div>
+          <div class="cmeta">
+            <div class="cname" title="${escapeAttr(it.name)}">${escapeHtml(it.name)}</div>
+            <div class="skelline skel" style="width:58%"></div>
+            <div class="miniprog"><i></i></div>
+          </div>
+        </div>`;
+    }
+    const resized = it.w !== it.ow || it.h !== it.oh;
+    const chips = FORMATS.map(f => `
+      <div class="chip ${it.on[f] ? "" : "off"}" style="--c:var(--${f})">
+        <u>${LABEL[f]}</u><b>${it.sizes[f] == null ? "···" : fmtBytes(it.sizes[f])}</b>
+      </div>`).join("");
+    return `
+      <div class="card ${it.id === state.selId ? "sel" : ""}" data-id="${it.id}" style="--ink:var(--${state.fmt})">
+        <div class="thumb"><img src="${it.thumb}" alt=""></div>
+        <div class="cmeta">
+          <div class="cname" title="${escapeAttr(it.name)}">${escapeHtml(it.name)}</div>
+          <div class="cdim">${it.ow}×${it.oh}${resized ? `<span class="arrow">→</span><em>${it.w}×${it.h}</em>` : ""}</div>
+          <div class="chips">${chips}</div>
+        </div>
+        <button class="kill" data-kill="${it.id}" title="Remove" aria-label="Remove ${escapeAttr(it.name)}">×</button>
+      </div>`;
+  }).join("");
+  el.list.innerHTML = cards + el.empty.outerHTML;
+  // re-bind the empty node reference after innerHTML rewrite
+  el.empty = el.list.querySelector(".empty");
+  el.empty.style.display = state.items.length ? "none" : "block";
+  renderTotals();
+}
+
+function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function escapeAttr(s){ return escapeHtml(s); }
+
+function renderTotals(){
+  const items = state.items.filter(i => !i.loading);
+  const srcTotal = items.reduce((a, i) => a + i.file.size, 0);
+  el.tSrc.textContent = items.length ? fmtBytes(srcTotal) : "—";
+
+  FORMATS.forEach(f => {
+    const row = el["tr" + cap(f)], amt = el["t" + cap(f)], pct = el["tp" + cap(f)];
+    const active = items.filter(i => i.on[f]);
+
+    if (!active.length){
+      row.classList.add("dim");
+      amt.textContent = "off"; pct.textContent = ""; pct.className = "pct";
+      return;
+    }
+    row.classList.remove("dim");
+
+    const known = active.filter(i => i.sizes[f] != null);
+    const out = known.reduce((a, i) => a + i.sizes[f], 0);
+    const src = known.reduce((a, i) => a + i.file.size, 0);
+    const waiting = active.length - known.length;
+
+    amt.textContent = known.length ? fmtBytes(out) + (waiting ? " +" : "") : "···";
+
+    if (!known.length || !src){
+      pct.textContent = waiting ? "calculating" : "";
+      pct.className = "pct";
+      return;
+    }
+    const d = (out - src) / src * 100;
+    pct.textContent = (d > 0 ? "+" : "−") + Math.abs(d).toFixed(0) + "%";
+    pct.className = "pct " + (d <= 0 ? "save" : "grow");
+  });
+}
+
+function updateCounts(){
+  el.stCount.textContent = state.items.length + " / " + MAX_IMAGES;
+  const mp = state.items.reduce((a, i) => a + (i.ow * i.oh) / 1e6, 0);
+  el.stMp.textContent = mp.toFixed(1) + " MP";
+  el.stMp.style.color = mp > MP_WARN ? "var(--warn)" : "";
+  const any = state.items.length > 0;
+  el.btnClear.disabled = !any;
+  el.btnRecalc.disabled = !any;
+  el.btnExportAll.disabled = !any;
+  el.btnExportOne.disabled = !sel();
+  el.btnScaleAll.disabled = !sel();
+  el.btnQualAll.disabled = !sel();
+  renderTotals();
+}
+
+function removeItem(id){
+  const i = state.items.findIndex(x => x.id === id);
+  if (i < 0) return;
+  state.items.splice(i, 1);
+  if (state.selId === id){
+    renderCache = { key:"", canvas:null };
+    state.selId = null;                       // let select() run instead of early-returning
+    const next = state.items[Math.min(i, state.items.length - 1)];
+    if (next) { select(next.id); } else { clearStage(); }
+  }
+  renderList(); updateCounts();
+}
+
+/* ---------------- selection + inspector ---------------- */
+
+function select(id){
+  if (state.selId === id) return;
+  const target = state.items.find(i => i.id === id);
+  if (target && target.loading) return;         // still decoding
+  state.selId = id;
+  renderCache = { key:"", canvas:null };
+  outBlobs = { png:null, jpeg:null, webp:null };
+  const it = sel();
+  if (origURL){ URL.revokeObjectURL(origURL); origURL = null; }
+  if (it){
+    origURL = URL.createObjectURL(it.file);
+    el.imgOrig.src = origURL;
+  }
+  renderList();
+  syncInspector();
+  state.fit = true;
+  refreshPreview(true);
+  updateCounts();
+}
+
+const STAGE_MSG_DEFAULT = el.stageMsg.innerHTML;
+
+function clearStage(){
+  el.wrap.style.display = "none";
+  el.cmpTag.style.display = "none";
+  el.stageMsg.innerHTML = STAGE_MSG_DEFAULT;
+  el.stageMsg.style.display = "flex";
+  el.fname.textContent = "No image selected";
+  ["fDims","fSize","fDelta","fSrc"].forEach(k => el[k].textContent = "—");
+  el.zVal.textContent = "—";
+  ["png","jpeg","webp"].forEach(f => { el["sz"+cap(f)].textContent = "—"; el["ts"+cap(f)].textContent = "—"; });
+  syncInspector();
+}
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
+function syncInspector(){
+  const it = sel();
+  const on = !!it;
+  el.inW.disabled = el.inH.disabled = !on;
+  el.qJpeg.disabled = !on;
+  el.qWebp.disabled = !on || !state.webpOK;
+  el.qPng.disabled = !on || !state.deflateOK;
+  el.cbDither.disabled = !on || !state.deflateOK;
+
+  if (!on){
+    el.inW.value = el.inH.value = "";
+    return;
+  }
+  el.inW.value = it.w; el.inH.value = it.h;
+  el.btnLink.classList.toggle("on", it.lock);
+  el.btnLink.setAttribute("aria-pressed", String(it.lock));
+  el.qJpeg.value = it.q.jpeg; el.qvJpeg.textContent = it.q.jpeg;
+  el.qWebp.value = it.q.webp; el.qvWebp.textContent = it.q.webp;
+  el.fname.textContent = it.name;
+
+  const pal = it.pngMode === "palette";
+  [...el.pngSeg.children].forEach(b => b.classList.toggle("on", (b.dataset.m === "palette") === pal));
+  el.pngPalette.style.display = pal ? "block" : "none";
+  el.pngLossless.style.display = pal ? "none" : "block";
+  el.qPng.value = it.pngColors; el.qvPng.textContent = it.pngColors;
+  el.cbDither.checked = it.pngDither;
+
+  FORMATS.forEach(f => {
+    el.blk[f].classList.toggle("on", it.on[f]);
+    el.blk[f].classList.toggle("off", !it.on[f]);
+    const sw = el.blk[f].querySelector(".sw");
+    sw.classList.toggle("on", it.on[f]);
+    sw.setAttribute("aria-checked", String(it.on[f]));
+  });
+
+  [...el.pcts.children].forEach(b => b.classList.toggle("on", Number(b.dataset.p) === it.pct));
+  el.fSrc.textContent = (fmtOfMime(it.file.type) ? LABEL[fmtOfMime(it.file.type)] : "?") + " · " + fmtBytes(it.file.size);
+  renderPassBadges(it);
+}
+
+function renderPassBadges(it){
+  if (isPassthrough(it, "png")){
+    el.ptPng.innerHTML = '<div class="badge">Original file, untouched</div>';
+  } else if (it.pngMode === "palette"){
+    el.ptPng.innerHTML = '<div class="badge warnb">Colours reduced — lossy</div>';
+  } else {
+    el.ptPng.innerHTML = '<div class="badge">Pixel-for-pixel identical</div>';
+  }
+  [["jpeg", el.ptJpeg], ["webp", el.ptWebp]].forEach(([f, node]) => {
+    if (isPassthrough(it, f)){
+      node.innerHTML = '<div class="badge">Original file, untouched</div>';
+    } else if (fmtOfMime(it.file.type) === f && it.q[f] === 100 && (it.w !== it.ow || it.h !== it.oh)){
+      node.innerHTML = '<div class="badge warnb">Re-encoded — image is resized</div>';
+    } else {
+      node.innerHTML = "";
+    }
+  });
+}
+
+/* ---------------- preview pipeline ---------------- */
+
+let previewTimer;
+function refreshPreview(immediate){
+  clearTimeout(previewTimer);
+  if (immediate) doPreview();
+  else previewTimer = setTimeout(doPreview, 190);
+}
+
+async function doPreview(){
+  const it = sel();
+  if (!it){ clearStage(); return; }
+  const my = ++seq;
+  const f = state.fmt;
+
+  el.stageMsg.style.display = "none";
+  document.documentElement.style.setProperty("--ink", "var(--" + f + ")");
+  el.cmpTag.style.setProperty("--c", "var(--" + f + ")");
+
+  let blob;
+  el.topload.classList.add("on");
+  try {
+    blob = await makeBlob(it, f);
+  } catch(e){
+    el.topload.classList.remove("on");
+    toast("Could not encode this image.", true); return;
+  }
+  if (my !== seq) return;
+  el.topload.classList.remove("on");
+
+  if (!blob){
+    el.wrap.style.display = "none";
+    el.stageMsg.style.display = "flex";
+    el.stageMsg.innerHTML = "This browser cannot write WebP.<br><span class='lbl'>try chrome, edge or firefox</span>";
+    return;
+  }
+
+  outBlobs[f] = blob;
+  it.sizes[f] = blob.size;
+  it.pass[f] = (blob === it.file);
+
+  if (outURL) URL.revokeObjectURL(outURL);
+  outURL = URL.createObjectURL(blob);
+  el.imgOut.src = outURL;
+  el.wrap.style.display = "block";
+  el.stageMsg.style.display = "none";
+  el.cmpTag.style.display = "block";
+
+  // size the stage content to the OUTPUT pixel dimensions
+  if (state.fit) fitZoom(); else applyView();
+
+  updateFooter(it, blob);
+  updateSizeLabels(it);
+  renderPassBadges(it);
+  renderList();
+
+  // sizes for the other two formats of this image, quietly
+  for (const other of FORMATS){
+    if (other === f || !it.on[other]) continue;
+    if (it.sizes[other] != null) continue;
+    const b = await makeBlob(it, other);
+    if (my !== seq) return;
+    if (b){ it.sizes[other] = b.size; outBlobs[other] = b; }
+    updateSizeLabels(it); renderList();
+  }
+}
+
+function updateFooter(it, blob){
+  el.fDims.textContent = it.w + " × " + it.h;
+  el.fSize.textContent = fmtBytes(blob.size);
+  if (blob === it.file){
+    el.fDelta.innerHTML = '<span class="save">original bytes</span>';
+  } else {
+    const d = (blob.size - it.file.size) / it.file.size * 100;
+    const cls = d <= 0 ? "save" : "grow";
+    el.fDelta.innerHTML = `<span class="${cls}">${d > 0 ? "+" : ""}${d.toFixed(0)}% vs source</span>`;
+  }
+}
+
+function updateSizeLabels(it){
+  FORMATS.forEach(f => {
+    const t = it.sizes[f] == null ? "—" : fmtBytes(it.sizes[f]);
+    el["sz"+cap(f)].textContent = it.on[f] ? t : "off";
+    el["ts"+cap(f)].textContent = t;
+  });
+}
+
+/* ---------------- background size calculation ---------------- */
+
+let queueRunning = false;
+function queueSizes(){
+  if (queueRunning) return;
+  queueRunning = true;
+  (async () => {
+    while (true){
+      const it = state.items.find(x => x.dirty && x.id !== state.selId);
+      if (!it) break;
+      it.dirty = false;
+      try {
+        const bmp = await createImageBitmap(it.file);
+        const canvas = drawResized(bmp, it.w, it.h);
+        bmp.close();
+        for (const f of FORMATS){
+          if (!it.on[f]){ it.sizes[f] = null; continue; }
+          const b = await makeBlob(it, f, canvas);
+          it.sizes[f] = b ? b.size : null;
+        }
+      } catch(e){ /* leave sizes blank */ }
+      renderList();
+      await new Promise(r => setTimeout(r, 0));
+    }
+    queueRunning = false;
+  })();
+}
+
+function markDirty(it){
+  it.sizes = { png:null, jpeg:null, webp:null };
+  it.dirty = true;
+}
+
+/* ---------------- zoom + pan ---------------- */
+
+function fitZoom(){
+  const it = sel(); if (!it) return;
+  const r = el.stage.getBoundingClientRect();
+  const pad = 48;
+  const z = Math.min((r.width - pad) / it.w, (r.height - pad) / it.h, 1);
+  state.zoom = Math.max(0.02, z);
+  state.fit = true;
+  state.panX = (r.width - it.w * state.zoom) / 2;
+  state.panY = (r.height - it.h * state.zoom) / 2;
+  applyView();
+}
+
+function setZoom(z, cx, cy){
+  const it = sel(); if (!it) return;
+  const r = el.stage.getBoundingClientRect();
+  if (cx == null){ cx = r.width / 2; cy = r.height / 2; }
+  const nz = clamp(z, 0.02, 32);
+  const ix = (cx - state.panX) / state.zoom;
+  const iy = (cy - state.panY) / state.zoom;
+  state.zoom = nz;
+  state.panX = cx - ix * nz;
+  state.panY = cy - iy * nz;
+  state.fit = false;
+  applyView();
+}
+
+function applyView(){
+  const it = sel(); if (!it) return;
+  el.wrap.style.width  = it.w + "px";
+  el.wrap.style.height = it.h + "px";
+  el.wrap.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+  el.wrap.classList.toggle("px", state.zoom > 1.05);
+  el.zVal.textContent = (state.zoom * 100).toFixed(state.zoom < 1 ? 0 : 0) + "%";
+}
+
+const ZOOMS = [0.05,0.08,0.12,0.17,0.25,0.33,0.5,0.67,1,1.5,2,3,4,6,8,12,16,24,32];
+function stepZoom(dir){
+  const z = state.zoom;
+  let t = dir > 0 ? ZOOMS.find(v => v > z * 1.001) : [...ZOOMS].reverse().find(v => v < z * 0.999);
+  if (t) setZoom(t);
+}
+
+/* ---------------- compare ---------------- */
+
+function setCompare(on){
+  if (state.comparing === on) return;
+  state.comparing = on;
+  el.imgOrig.classList.toggle("hide", !on);
+  el.imgOut.classList.toggle("hide", on);
+  el.cmpTag.textContent = on ? "Original" : "Output";
+  el.cmpTag.classList.toggle("orig", on);
+  el.cmpTag.classList.toggle("out", !on);
+  el.holdBtn.classList.toggle("on", on);
+}
+
+/* ---------------- ZIP writer (store, no compression) ---------------- */
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++){
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8){
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function buildZip(entries){
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const d = new Date();
+  const time = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF;
+  const date = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF;
+
+  for (const e of entries){
+    const nb = enc.encode(e.name);
+    const crc = crc32(e.data);
+    const n = e.data.length;
+
+    const lh = new Uint8Array(30 + nb.length);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true); lv.setUint16(10, time, true); lv.setUint16(12, date, true);
+    lv.setUint32(14, crc, true); lv.setUint32(18, n, true); lv.setUint32(22, n, true);
+    lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+    lh.set(nb, 30);
+
+    const ch = new Uint8Array(46 + nb.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true); cv.setUint16(10, 0, true);
+    cv.setUint16(12, time, true); cv.setUint16(14, date, true);
+    cv.setUint32(16, crc, true); cv.setUint32(20, n, true); cv.setUint32(24, n, true);
+    cv.setUint16(28, nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    ch.set(nb, 46);
+
+    parts.push(lh, e.data);
+    central.push(ch);
+    offset += lh.length + n;
+  }
+
+  const cdSize = central.reduce((a, c) => a + c.length, 0);
+  const eo = new Uint8Array(22);
+  const ev = new DataView(eo.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+
+  return new Blob([...parts, ...central, eo], { type:"application/zip" });
+}
+
+function saveBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function outName(it, f, used){
+  const resized = it.w !== it.ow || it.h !== it.oh;
+  let base = baseName(it.name) + (resized ? `_${it.w}x${it.h}` : "");
+  let name = `${base}.${EXT[f]}`;
+  let n = 2;
+  while (used.has(name)){ name = `${base}_${n++}.${EXT[f]}`; }
+  used.add(name);
+  return name;
+}
+
+/* ---------------- export ---------------- */
+
+async function exportItems(items, zipName){
+  const jobs = [];
+  for (const it of items) for (const f of FORMATS) if (it.on[f]) jobs.push([it, f]);
+  if (!jobs.length){ toast("No formats are switched on.", true); return; }
+
+  progress(true, "Encoding…", 0);
+  const used = new Set();
+  const entries = [];
+  let done = 0;
+
+  try {
+    for (const it of items){
+      const active = FORMATS.filter(f => it.on[f]);
+      if (!active.length) continue;
+
+      // decode once per image, reuse the canvas for all three formats
+      let canvas = null;
+      const needsCanvas = active.some(f => !isPassthrough(it, f));
+      if (needsCanvas){
+        const bmp = await createImageBitmap(it.file);
+        canvas = drawResized(bmp, it.w, it.h);
+        bmp.close();
+      }
+
+      for (const f of active){
+        const blob = await makeBlob(it, f, canvas);
+        done++;
+        progress(true, `Encoding ${it.name}`, done / jobs.length * 100);
+        if (!blob) continue;
+        it.sizes[f] = blob.size;
+        entries.push({ name: outName(it, f, used), data: new Uint8Array(await blob.arrayBuffer()) });
+        await new Promise(r => setTimeout(r, 0));
+      }
+      canvas = null;
+    }
+
+    if (!entries.length){ progress(false); toast("Nothing to export.", true); return; }
+
+    if (entries.length === 1){
+      saveBlob(new Blob([entries[0].data]), entries[0].name);
+    } else {
+      progress(true, "Packing zip…", 100);
+      saveBlob(buildZip(entries), zipName);
+    }
+    toast(entries.length === 1 ? "Saved " + entries[0].name : "Saved " + entries.length + " files");
+    renderList(); updateSizeLabels(sel() || { sizes:{}, on:{} });
+  } catch(e){
+    toast("Export failed: " + e.message, true);
+  } finally {
+    progress(false);
+  }
+}
+
+/* ---------------- events ---------------- */
+
+el.drop.addEventListener("click", () => el.file.click());
+el.drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); el.file.click(); } });
+el.file.addEventListener("change", e => { addFiles(e.target.files); el.file.value = ""; });
+
+// Only react to files dragged in from outside the page — never to the
+// preview image being dragged around inside it.
+const isFileDrag = e => {
+  const t = e.dataTransfer && e.dataTransfer.types;
+  return !!t && Array.prototype.indexOf.call(t, "Files") !== -1;
+};
+
+["dragenter","dragover"].forEach(ev => window.addEventListener(ev, e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault(); el.drop.classList.add("hot");
+}));
+["dragleave","drop"].forEach(ev => window.addEventListener(ev, e => {
+  if (ev === "drop" || e.relatedTarget === null) el.drop.classList.remove("hot");
+}));
+window.addEventListener("drop", e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+});
+// belt and braces: kill any drag starting on the preview itself
+el.stage.addEventListener("dragstart", e => e.preventDefault());
+
+el.list.addEventListener("click", e => {
+  const kill = e.target.closest("[data-kill]");
+  if (kill){ e.stopPropagation(); removeItem(Number(kill.dataset.kill)); return; }
+  const card = e.target.closest(".card");
+  if (card) select(Number(card.dataset.id));
+});
+
+el.btnClear.addEventListener("click", () => {
+  state.items = []; state.selId = null;
+  renderCache = { key:"", canvas:null };
+  renderList(); updateCounts(); clearStage();
+});
+el.btnRecalc.addEventListener("click", () => {
+  state.items.forEach(markDirty);
+  renderList(); queueSizes(); refreshPreview(true);
+});
+
+// format tabs
+el.tabs.addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (!t) return;
+  state.fmt = t.dataset.f;
+  [...el.tabs.children].forEach(b => b.classList.toggle("on", b === t));
+  document.documentElement.style.setProperty("--ink", "var(--" + state.fmt + ")");
+  renderList();
+  refreshPreview(true);
+});
+
+// zoom
+el.zIn.addEventListener("click", () => stepZoom(1));
+el.zOut.addEventListener("click", () => stepZoom(-1));
+el.zFit.addEventListener("click", fitZoom);
+el.z100.addEventListener("click", () => setZoom(1));
+el.stage.addEventListener("wheel", e => {
+  if (!sel()) return;
+  e.preventDefault();
+  const r = el.stage.getBoundingClientRect();
+  const factor = Math.exp(-e.deltaY * 0.0022);
+  setZoom(state.zoom * factor, e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+el.stage.addEventListener("dblclick", () => { state.zoom > 0.999 ? fitZoom() : setZoom(1); });
+
+let dragging = false, lastX = 0, lastY = 0;
+el.stage.addEventListener("pointerdown", e => {
+  if (!sel()) return;
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  el.stage.setPointerCapture(e.pointerId);
+  el.stage.classList.add("drag");
+});
+el.stage.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  state.panX += e.clientX - lastX; state.panY += e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  state.fit = false; applyView();
+});
+["pointerup","pointercancel"].forEach(ev => el.stage.addEventListener(ev, () => {
+  dragging = false; el.stage.classList.remove("drag");
+}));
+window.addEventListener("resize", () => { if (state.fit) fitZoom(); });
+
+// compare
+el.holdBtn.addEventListener("pointerdown", () => setCompare(true));
+["pointerup","pointerleave","pointercancel"].forEach(ev => el.holdBtn.addEventListener(ev, () => setCompare(false)));
+window.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea")) return;
+  if (e.key === "c" || e.key === "C"){ setCompare(true); return; }
+  if (e.key === "1"){ el.tabs.children[0].click(); }
+  if (e.key === "2"){ el.tabs.children[1].click(); }
+  if (e.key === "3"){ el.tabs.children[2].click(); }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    const i = state.items.findIndex(x => x.id === state.selId);
+    if (i < 0) return;
+    e.preventDefault();
+    const n = state.items[clamp(i + (e.key === "ArrowDown" ? 1 : -1), 0, state.items.length - 1)];
+    if (n) select(n.id);
+  }
+});
+window.addEventListener("keyup", e => { if (e.key === "c" || e.key === "C") setCompare(false); });
+
+// size fields
+function setSize(w, h){
+  const it = sel(); if (!it) return;
+  it.w = clamp(Math.round(w) || 1, 1, 20000);
+  it.h = clamp(Math.round(h) || 1, 1, 20000);
+  it.pct = Math.round(it.w / it.ow * 100);
+  markDirty(it); it.dirty = false;       // selected item is handled by the preview
+  renderCache = { key:"", canvas:null };
+  syncInspector(); renderList(); updateSizeLabels(it);
+  state.fit = true;
+  refreshPreview();
+}
+el.inW.addEventListener("input", () => {
+  const it = sel(); if (!it) return;
+  const w = Number(el.inW.value);
+  if (!w) return;
+  setSize(w, it.lock ? Math.max(1, Math.round(w * it.oh / it.ow)) : it.h);
+});
+el.inH.addEventListener("input", () => {
+  const it = sel(); if (!it) return;
+  const h = Number(el.inH.value);
+  if (!h) return;
+  setSize(it.lock ? Math.max(1, Math.round(h * it.ow / it.oh)) : it.w, h);
+});
+el.btnLink.addEventListener("click", () => {
+  const it = sel(); if (!it) return;
+  it.lock = !it.lock; syncInspector();
+});
+el.pcts.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const it = sel(); if (!it) return;
+  const p = Number(b.dataset.p);
+  setSize(Math.max(1, Math.round(it.ow * p / 100)), Math.max(1, Math.round(it.oh * p / 100)));
+});
+el.btnScaleAll.addEventListener("click", () => {
+  const src = sel(); if (!src) return;
+  const p = src.w / src.ow;
+  state.items.forEach(it => {
+    if (it === src) return;
+    it.w = Math.max(1, Math.round(it.ow * p));
+    it.h = Math.max(1, Math.round(it.oh * p));
+    it.pct = Math.round(p * 100);
+    markDirty(it);
+  });
+  renderList(); queueSizes();
+  toast("Scaled every image to " + Math.round(p * 100) + "%");
+});
+
+// quality sliders
+function bindQuality(fmt, slider, label){
+  slider.addEventListener("input", () => {
+    const it = sel(); if (!it) return;
+    it.q[fmt] = Number(slider.value);
+    label.textContent = slider.value;
+    it.sizes[fmt] = null;
+    renderPassBadges(it);
+    if (state.fmt !== fmt){ state.fmt = fmt; [...el.tabs.children].forEach(b => b.classList.toggle("on", b.dataset.f === fmt)); }
+    refreshPreview();
+  });
+}
+bindQuality("jpeg", el.qJpeg, el.qvJpeg);
+bindQuality("webp", el.qWebp, el.qvWebp);
+
+function focusPng(){
+  if (state.fmt !== "png"){
+    state.fmt = "png";
+    [...el.tabs.children].forEach(b => b.classList.toggle("on", b.dataset.f === "png"));
+    document.documentElement.style.setProperty("--ink", "var(--png)");
+  }
+}
+el.pngSeg.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const it = sel(); if (!it) return;
+  it.pngMode = b.dataset.m;
+  it.sizes.png = null;
+  focusPng(); syncInspector(); renderList();
+  refreshPreview(true);
+});
+el.qPng.addEventListener("input", () => {
+  const it = sel(); if (!it) return;
+  it.pngColors = Number(el.qPng.value);
+  el.qvPng.textContent = it.pngColors;
+  it.sizes.png = null;
+  focusPng();
+  refreshPreview();
+});
+el.cbDither.addEventListener("change", () => {
+  const it = sel(); if (!it) return;
+  it.pngDither = el.cbDither.checked;
+  it.sizes.png = null;
+  focusPng();
+  refreshPreview(true);
+});
+
+// format on/off switches
+document.querySelectorAll("[data-en]").forEach(sw => {
+  sw.addEventListener("click", () => {
+    const it = sel(); if (!it) return;
+    const f = sw.dataset.en;
+    if (f === "webp" && !state.webpOK) return;
+    it.on[f] = !it.on[f];
+    syncInspector(); updateSizeLabels(it); renderList();
+    if (it.on[f] && it.sizes[f] == null) refreshPreview(true);
+  });
+});
+
+el.btnQualAll.addEventListener("click", () => {
+  const src = sel(); if (!src) return;
+  state.items.forEach(it => {
+    if (it === src) return;
+    it.q = { ...src.q };
+    it.on = { ...src.on };
+    it.pngMode = src.pngMode;
+    it.pngColors = src.pngColors;
+    it.pngDither = src.pngDither;
+    markDirty(it);
+  });
+  renderList(); queueSizes();
+  toast("Quality settings copied to every image");
+});
+
+el.cbPass.addEventListener("change", () => {
+  state.passthrough = el.cbPass.checked;
+  state.items.forEach(markDirty);
+  const it = sel(); if (it) it.dirty = false;
+  renderList(); queueSizes(); refreshPreview(true);
+});
+el.matte.addEventListener("input", () => {
+  state.matte = el.matte.value;
+  state.items.forEach(it => { it.sizes.jpeg = null; it.dirty = true; });
+  const it = sel(); if (it) it.dirty = false;
+  renderList();
+  if (state.fmt === "jpeg") refreshPreview();
+});
+
+el.btnExportOne.addEventListener("click", () => {
+  const it = sel(); if (!it) return;
+  exportItems([it], baseName(it.name) + "_converted.zip");
+});
+el.btnExportAll.addEventListener("click", () => {
+  exportItems(state.items, "trichrome_export.zip");
+});
+
+/* ---------------- boot ---------------- */
+
+(async function boot(){
+  // CompressionStream powers the hand-rolled PNG encoder.
+  state.deflateOK = typeof CompressionStream !== "undefined";
+  if (!state.deflateOK){
+    el.pngSeg.style.display = "none";
+    el.pngLossless.innerHTML = '<div class="lossless">This browser has no CompressionStream, so PNG falls back to the built-in encoder. Still lossless, just larger.</div>';
+  }
+
+  // Does this browser write WebP from a canvas?
+  const c = document.createElement("canvas"); c.width = c.height = 1;
+  const b = await toBlobAsync(c, "image/webp", 0.9);
+  state.webpOK = !!b && b.type === "image/webp";
+  if (!state.webpOK){
+    el.qWebp.disabled = true;
+    el.blk.webp.classList.add("off");
+    el.szWebp.textContent = "n/a";
+    toast("This browser cannot write WebP — PNG and JPG still work.", true);
+  }
+  updateCounts();
+  clearStage();
+})();
+</script>
+</body>
+</html>
